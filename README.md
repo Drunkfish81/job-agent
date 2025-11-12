@@ -66,11 +66,12 @@
     ```
 
 3.  **填入你的 Key 和 Cookie：**
-    打开 `.env` 文件，填入你自己的“秘密”，格式如下：
+    打开 `ai_agent_server.py` 文件，填入你自己的deepseek api（后面可能我们一起注册一个共用api），格式如下：
     ```
-    DEEPSEEK_API_KEY="sk-xxxxxx... (你的DeepSeek Key)"
-    ZHAOPIN_COOKIE="x-zp-client-id=... (你自己去智联偷的Cookie)"
+    MY_DEEPSEEK_API_KEY = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # 确保这里是你的 Key
+    
     ```
+    智联的Cookie我已经偷了，不过可能会失效，需要及时更新
 
 4.  **（可选）生成静态搜索库:**
     如果你想让“手动语义搜索”功能也生效，请先运行这两个脚本：
