@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的智能招聘Agent</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .container { max-width: 800px; margin: 0 auto; background-color: #ffffff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .module { margin-bottom: 30px; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+        h1, h2 { text-align: center; }
+        .search-box { display: flex; margin-bottom: 20px; }
+        #searchInput { flex-grow: 1; padding: 10px; font-size: 16px; border: 1px solid #ddd; border-radius: 4px 0 0 4px; }
+        #searchButton { padding: 10px 20px; font-size: 16px; background-color: #007bff; color: white; border: none; cursor: pointer; border-radius: 0 4px 4px 0; }
+        #resumeFile { border: 1px solid #ddd; padding: 10px; width: calc(100% - 24px); border-radius: 4px; }
+        #analyzeButton { padding: 10px 20px; font-size: 16px; background-color: #28a745; color: white; border: none; cursor: pointer; border-radius: 4px; margin-top: 10px; width: 100%; }
+        /* (新) 禁用时的样式 */
+        #analyzeButton:disabled { background-color: #aaa; cursor: not-allowed; }
+        
+        #resumeStatus, #searchStatus { margin-top: 10px; color: #555; }
+        
+        /* (修改) 最终结果区域的样式 */
+        #resumeResultsArea {
+            background-color: #fdfdfd;
+            border: 1px solid #eee;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 4px;
+            white-space: pre-wrap; /* <-- 关键：让换行符(\n)生效 */
+            line-height: 1.6;
+        }
+        
+        pre { background-color: #eee; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .job-item { border: 1px solid #eee; padding: 15px; margin-bottom: 10px; border-radius: 4px; }
+        .job-item h3 { margin: 0 0 5px 0; }
+        .job-item p { margin: 4px 0; }
+        .job-item a { color: #007bff; text-decoration: none; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>我的智能招聘Agent (V4 最终版)</h1>
+
+        <div class="module">
+            <h2>1. 简历智能分析 (一条龙服务)</h2>
+            <p>上传 PDF 简历，AI将自动：①分析简历 ②爬取岗位 ③智能匹配 (此过程可能需要30-60秒)</p>
+            <input type="file" id="resumeFile" accept=".pdf">
+            <button id="analyzeButton">上传并开始匹配</button>
+            <div id="resumeStatus">在这里等待最终推荐...</div>
+            
+            <div id="resumeResultsArea" style="display: none;"></div> 
+        </div>
+
+        <div class="module">
+            <h2>2. 手动语义搜索 (静态库)</h2>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="输入关键词 (如: java, python)...">
+                <button id="searchButton">搜索</button>
+            </div>
+            <div id="searchStatus">在这里等待搜索结果...</div>
+            <div id="searchResultsArea"></div>
+        </div>
+    </div>
+
+    <script>
+        // ----------------------------------------------------
+        // 模块一: 简历分析 (JS 最终修改)
+        // ----------------------------------------------------
+        const resumeFile = document.getElementById('resumeFile');
+        const analyzeButton = document.getElementById('analyzeButton');
+        const resumeStatus = document.getElementById('resumeStatus');
+        const resumeResultsArea = document.getElementById('resumeResultsArea');
+
+        analyzeButton.addEventListener('click', handleResumeUpload);
+
+        function handleResumeUpload() {
+            const file = resumeFile.files[0];
+            if (!file) {
+                alert('请先选择一个 PDF 文件！');
+                return;
+            }
+            if (file.type !== "application/pdf") {
+                 alert('目前只支持 PDF 文件。');
+                return;
+            }
+
+            // --- (修改) 核心逻辑 ---
+            
+            // 1. 禁用按钮，防止重复点击
+            analyzeButton.disabled = true;
+            analyzeButton.textContent = '匹配中... (请耐心等待...)';
+            resumeStatus.textContent = '正在上传简历... (共 4 步)';
+            resumeResultsArea.style.display = 'none'; // 隐藏旧结果
+            resumeResultsArea.innerHTML = '';
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fetch('http://127.0.0.1:8000/analyze-resume', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                // (中途更新状态)
+                resumeStatus.textContent = '正在调用 AI (任务1) 解析简历...';
+                return response.json();
+            })
+            .then(data => {
+                console.log('服务器返回的最终结果:', data);
+                
+                // 检查是否有错误
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // (修改) 我们现在只期待 "final_recommendation"
+                if (data.final_recommendation) {
+                    resumeStatus.textContent = '匹配完成！这是AI为你生成的专属推荐：';
+                    
+                    // (修改) 把 AI 返回的带换行符的文本，直接塞进 div
+                    // (注意: 我们没有对链接做特殊处理，AI 最好能返回可点击的)
+                    resumeResultsArea.textContent = data.final_recommendation; 
+                    resumeResultsArea.style.display = 'block'; // 显示结果
+                } else {
+                    throw new Error('服务器未返回有效的推荐。');
+                }
+
+                // 恢复按钮
+                analyzeButton.disabled = false;
+                analyzeButton.textContent = '上传并开始匹配';
+
+            })
+            .catch(error => {
+                console.error('匹配失败:', error);
+                resumeStatus.textContent = `匹配失败: ${error.message}`;
+                // 恢复按钮
+                analyzeButton.disabled = false;
+                analyzeButton.textContent = '上传并开始匹配';
+            });
+            
+            // (中途更新状态)
+            resumeStatus.textContent = '已上传，服务器正在处理 (这可能需要1分钟)...';
+        }
+
+
+        // ----------------------------------------------------
+        // 模块二: 语义搜索 (旧JS, 无需改动)
+        // ----------------------------------------------------
+        const searchInput = document.getElementById('searchInput');
+        const searchButton = document.getElementById('searchButton');
+        const searchStatus = document.getElementById('searchStatus');
+        const searchResultsArea = document.getElementById('searchResultsArea');
+
+        searchButton.addEventListener('click', performSearch);
+        searchInput.addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                performSearch();
+            }
+        });
+
+        function performSearch() {
+            const keyword = searchInput.value;
+            if (!keyword) {
+                alert('请输入关键词！');
+                return;
+            }
+            searchStatus.textContent = `正在搜索 "${keyword}"...`;
+            searchResultsArea.innerHTML = ''; 
+            const serverUrl = `http://127.0.0.1:8000/search?keyword=${encodeURIComponent(keyword)}`;
+            fetch(serverUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    const jobs = data.results;
+                    if (jobs.length === 0) {
+                        searchStatus.textContent = `没有找到关于 "${keyword}" 的结果。`;
+                    } else {
+                        searchStatus.textContent = `找到了 ${jobs.length} 个结果:`;
+                    }
+                    jobs.forEach(job => {
+                        const jobDiv = document.createElement('div');
+                        jobDiv.className = 'job-item';
+                        jobDiv.innerHTML = `
+                            <h3>${job.name}</h3>
+                            <p><strong>公司:</strong> ${job.companyName}</p>
+                            <p><strong>薪水:</strong> ${job.salary}</p>
+                            <p><a href="${job.positionURL}" target="_blank">查看投递链接</a></p>
+                        `;
+                        searchResultsArea.appendChild(jobDiv);
+                    });
+                })
+                .catch(error => {
+                    console.error('搜索失败:', error);
+                    searchStatus.textContent = `搜索失败: ${error.message}`;
+                });
+        }
+    </script>
+
+</body>
+</html>
