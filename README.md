@@ -9,11 +9,11 @@
     pip install -r requirements.txt
     ```
 
-2.  **创建你自己的 `.env` 文件:**
-    在项目根目录创建 `.env` 文件，并填入你自己的Key：
+2.  **输入你自己的deepseek api 文件:**
+    在ai_agent_server.py中输入你自己的api：
     ```
-    DEEPSEEK_API_KEY="你的Key"
-    ZHAOPIN_COOKIE="你自己去偷的Cookie"
+    MY_DEEPSEEK_API_KEY = "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" # 确保这里是你的 Key
+    ZHAOPIN_COOKIE我已经偷好放进去了
     ```
 
 3.  **运行索引 (如果需要):**
