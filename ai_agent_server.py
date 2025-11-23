@@ -734,16 +734,37 @@ async def analyze_resume_and_match(file: UploadFile = File(...), user_id: str = 
             pass
         
         # 步骤7: 自动投递
+        # yield json.dumps({"step": 7, "status": "active", "message": "开始自动投递..."}) + "\n"
+        
+        # # 简单延迟以模拟处理时间
+        # await asyncio.sleep(1)
+        
+        # yield json.dumps({
+        #     "step": 7, 
+        #     "status": "completed", 
+        #     "message": f"✅ 分析完成！已自动收藏{auto_favorited_count}个推荐岗位"
+        # }) + "\n"
+
+        # 步骤7: 自动投递
         yield json.dumps({"step": 7, "status": "active", "message": "开始自动投递..."}) + "\n"
-        
-        # 简单延迟以模拟处理时间
-        await asyncio.sleep(1)
-        
+
+        auto_applied_count = 0
+        for job in top_jobs:
+            pos_url = job.get('positionURL')
+            pos_id = extract_position_id(pos_url)
+            if pos_id:
+                success = auto_apply_to_job_browser(pos_id, APPLY_COOKIE)
+                if success:
+                    auto_applied_count += 1
+                yield json.dumps({"step": 7, "substep": "applying", "job": job['name'], "company": job['companyName'], "success": success}) + "\n"
+            await asyncio.sleep(1)
+
         yield json.dumps({
-            "step": 7, 
-            "status": "completed", 
-            "message": f"✅ 分析完成！已自动收藏{auto_favorited_count}个推荐岗位"
+            "step": 7,
+            "status": "completed",
+            "message": f"✅ 分析完成！已自动收藏{auto_favorited_count}个推荐岗位，已自动投递{auto_applied_count}个岗位"
         }) + "\n"
+
     
     return StreamingResponse(event_generator(), media_type="text/plain")
 
