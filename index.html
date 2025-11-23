@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>JobAgent Pro</title>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-light: #eff6ff;
+            --text-main: #1f2937;
+            --text-sub: #6b7280;
+            --bg-body: #f3f4f6;
+            --bg-card: #ffffff;
+            --border: #e5e7eb;
+            --success: #10b981;
+            --nav-height: 60px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0; padding: 0; padding-bottom: calc(var(--nav-height) + 20px);
+            background-color: var(--bg-body); color: var(--text-main); height: 100vh; overflow-y: auto;
+        }
+
+        .container { max-width: 800px; margin: 0 auto; padding: 15px; }
+        
+        /* Header (已移除版本号) */
+        .header {
+            background: var(--bg-card); padding: 15px 20px; position: sticky; top: 0; z-index: 100;
+            border-bottom: 1px solid var(--border); display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+        }
+        .logo { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .logo i { color: var(--primary); font-size: 22px; }
+        
+        .bottom-nav {
+            position: fixed; bottom: 0; left: 0; right: 0; height: var(--nav-height);
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
+            border-top: 1px solid var(--border); display: flex; justify-content: space-around; align-items: center;
+            z-index: 1000; max-width: 800px; margin: 0 auto;
+        }
+        .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--text-sub); font-size: 10px; height: 100%; cursor: pointer; }
+        .nav-item i { font-size: 24px; margin-bottom: 4px; }
+        .nav-item.active { color: var(--primary); }
+
+        /* Cards & Buttons */
+        .card { background: var(--bg-card); border-radius: 12px; padding: 15px; margin-bottom: 12px; border: 1px solid var(--border); }
+        .btn-primary {
+            background: var(--primary); color: white; border: none; padding: 12px; border-radius: 8px;
+            font-weight: 600; width: 100%; cursor: pointer; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 16px;
+        }
+        .btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+        
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .ph-spin { animation: spin 1s linear infinite; }
+        .tag { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; margin-right: 6px; }
+        .tag-blue { background: var(--primary-light); color: var(--primary); }
+
+        /* === 新增：左右并排的上传预览区 === */
+        .combined-upload-box {
+            display: flex;
+            height: 180px; /* 固定高度，节省空间 */
+            border: 2px dashed var(--primary); /* 外框改为虚线 */
+            border-radius: 12px;
+            overflow: hidden;
+            background: white;
+            margin-bottom: 15px;
+        }
+        
+        /* 左侧：上传按钮 */
+        .upload-left {
+            flex: 1;
+            background: var(--primary-light);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            padding: 15px;
+            text-align: center;
+            border-right: 1px solid #dbeafe;
+            transition: background 0.2s;
+        }
+        .upload-left:hover { background: #dbeafe; }
+        .upload-left i { font-size: 32px; color: var(--primary); margin-bottom: 8px; }
+        .upload-left .main-text { font-weight: 600; font-size: 14px; color: var(--text-main); }
+        .upload-left .sub-text { font-size: 11px; color: var(--text-sub); margin-top: 4px; }
+
+        /* 右侧：预览区域 */
+        .preview-right {
+            flex: 1.2; /* 预览区稍微宽一点 */
+            background: #f9fafb;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* 预览时的占位文字 */
+        .preview-placeholder {
+            color: #9ca3af;
+            font-size: 12px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        /* PDF Iframe */
+        iframe#pdfViewer {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none; /* 默认隐藏，上传后显示 */
+        }
+        
+        /* 右上角文件大小标签 */
+        .file-info-badge {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            display: none;
+        }
+
+        /* Process Steps */
+        .process-steps { display: flex; justify-content: space-between; margin: 10px 0; position: relative; padding: 0 10px; }
+        .process-steps::before { content: ''; position: absolute; top: 15px; left: 20px; right: 20px; height: 3px; background: #e5e7eb; z-index: 1; }
+        .step { position: relative; z-index: 2; background: var(--bg-card); padding: 0 5px; text-align: center; width: 20%; }
+        .step-icon {
+            width: 34px; height: 34px; border-radius: 50%; background: #e5e7eb; color: #fff;
+            font-size: 15px; font-weight: bold; display: flex; align-items: center; justify-content: center; margin: 0 auto 6px; transition: all 0.3s;
+        }
+        .step.active .step-icon { background: var(--primary); transform: scale(1.1); box-shadow: 0 0 0 4px var(--primary-light); }
+        .step.completed .step-icon { background: var(--success); }
+        .step-label { font-size: 13px; color: var(--text-sub); font-weight: 500; }
+        .step.active .step-label { color: var(--primary); font-weight: bold; }
+
+        /* Jobs */
+        .job-card { border: 1px solid var(--border); padding: 16px; margin-bottom: 12px; border-radius: 8px; background: white; }
+        .job-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .job-salary { color: #dc2626; font-weight: 700; }
+        
+        /* Chat */
+        .chat-fab {
+            position: fixed; bottom: 80px; right: 20px; width: 50px; height: 50px;
+            background: var(--primary); border-radius: 50%; color: white;
+            display: flex; align-items: center; justify-content: center; font-size: 24px;
+            box-shadow: 0 4px 15px rgba(37, 99, 235, 0.4); cursor: pointer; z-index: 1500;
+        }
+        #chatContainer {
+            position: fixed; bottom: 70px; right: 20px; width: 340px; height: 480px;
+            background: white; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+            display: none; flex-direction: column; z-index: 2000; border: 1px solid var(--border);
+        }
+
+        /* Community */
+        .community-post { padding: 20px; border-bottom: 1px solid var(--border); }
+        .post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+        .avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 14px; }
+        .post-actions { margin-top: 10px; display: flex; gap: 20px; font-size: 13px; color: #6b7280; }
+        .post-tags { margin-top: 10px; display: flex; gap: 5px; }
+        .post-tags span { background: #f3f4f6; padding: 2px 8px; border-radius: 4px; font-size: 11px; color: var(--text-sub); }
+
+        /* Profile */
+        .profile-header { display: flex; align-items: center; gap: 15px; }
+        .menu-item { padding: 15px 0; border-bottom: 1px solid var(--border); display: flex; align-items: center; cursor: pointer; }
+        .menu-item i { margin-right: 10px; font-size: 20px; color: var(--text-sub); }
+
+        .view-section { display: none; animation: fadeIn 0.2s ease; }
+        .view-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    </style>
+</head>
+
+<body>
+
+    <!-- 移除版本号，只保留LOGO -->
+    <div class="header">
+        <div class="logo"><i class="ph-bold ph-robot"></i> JobAgent</div>
+    </div>
+
+    <div class="container">
+        
+        <!-- Tab 1: Agent -->
+        <div id="view-agent" class="view-section active">
+            
+            <div id="processContainer" class="card">
+                <div class="process-steps">
+                    <div class="step" id="stepReading"><div class="step-icon">1</div><div class="step-label">读取</div></div>
+                    <div class="step" id="stepScoring"><div class="step-icon">2</div><div class="step-label">评分</div></div>
+                    <div class="step" id="stepSuggestions"><div class="step-icon">3</div><div class="step-label">建议</div></div>
+                    <div class="step" id="stepMatching"><div class="step-icon">4</div><div class="step-label">匹配</div></div>
+                    <div class="step" id="stepDelivery"><div class="step-icon">5</div><div class="step-label">投递</div></div>
+                </div>
+            </div>
+
+            <div id="statusArea" style="display:none; margin-bottom:10px; padding:10px; background:#dbeafe; color:#1e40af; border-radius:8px; font-size:13px;"></div>
+
+            <div class="card" style="padding: 20px;">
+                <input type="file" id="resumeFile" accept=".pdf" style="display: none;">
+                
+                <!-- === 优化点：左右并排的上传/预览区 === -->
+                <div class="combined-upload-box">
+                    <!-- 左侧：上传触发区 -->
+                    <div class="upload-left" onclick="document.getElementById('resumeFile').click()">
+                        <i class="ph-duotone ph-file-arrow-up"></i>
+                        <div class="main-text">上传简历</div>
+                        <div class="sub-text">支持 PDF 格式</div>
+                        <div class="sub-text" style="color:var(--primary); margin-top:5px;">点击选择文件</div>
+                    </div>
+                    
+                    <!-- 右侧：预览区 -->
+                    <div class="preview-right">
+                        <div id="previewPlaceholder" class="preview-placeholder">
+                            <i class="ph-duotone ph-eye" style="font-size: 24px; opacity: 0.5;"></i>
+                            <span>等待上传...</span>
+                        </div>
+                        <iframe id="pdfViewer" src=""></iframe>
+                        <div id="fileInfoBadge" class="file-info-badge"></div>
+                    </div>
+                </div>
+
+                <button id="analyzeButton" class="btn-primary">
+                    <i class="ph-bold ph-lightning"></i> 开始智能分析
+                </button>
+            </div>
+
+            <!-- 分析结果 -->
+            <div id="analysisContainer" style="display: none;">
+                <div class="card" style="background: linear-gradient(135deg, #2563eb, #1e40af); color: white;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <div>
+                            <div style="opacity:0.9; font-size:14px;">竞争力评分</div>
+                            <div style="font-size: 42px; font-weight: 700; margin: 5px 0;">
+                                <span id="scoreNumber">0</span> <span style="font-size:16px; font-weight:400;">/ 100</span>
+                            </div>
+                            <div style="font-size:12px; opacity:0.8;">击败了 <span id="scoreBeat">0%</span> 的竞争者</div>
+                        </div>
+                        <i class="ph-duotone ph-medal" style="font-size: 64px; opacity: 0.5;"></i>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <h4 style="margin-top:0;">📊 维度分析</h4>
+                    <div id="breakdownGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px;"></div>
+                </div>
+
+                <div class="card">
+                    <h4 style="margin-top:0; color: #b45309;">💡 改进建议</h4>
+                    <ul id="improvementsList" style="padding-left: 20px; font-size: 14px; margin-bottom: 0;"></ul>
+                </div>
+
+                <div id="salaryBox" class="card" style="background: #f0fdf4; border-color: #bbf7d0;"></div>
+
+                <div id="jobsArea" style="display: none;">
+                    <h3 style="margin: 25px 0 15px 0;">🎯 智能匹配 & 自动投递</h3>
+                    <div id="jobsContainer"></div>
+                </div>
+            </div>
+            
+            <div class="chat-fab" onclick="toggleChat()"><i class="ph-fill ph-chat-circle-text"></i></div>
+        </div>
+
+        <!-- Tab 2: 社区 (保持丰富内容) -->
+        <div id="view-community" class="view-section">
+             <div class="card" style="padding: 15px;">
+                <div style="display:flex; gap:10px; overflow-x:auto; padding-bottom:5px;">
+                    <span class="tag tag-blue">🔥 薪资爆料</span>
+                    <span class="tag" style="background:#fef3c7; color:#d97706;">⚡ 面经</span>
+                    <span class="tag" style="background:#fee2e2; color:#dc2626;">💣 避雷</span>
+                </div>
+            </div>
+            <div class="card" style="padding:0;">
+                <div class="community-post">
+                    <div class="post-header">
+                        <div class="avatar" style="background:#3b82f6;">匿</div>
+                        <div class="post-user">某985硕士 <span style="font-weight:normal; color:#666;">@ 杭州</span><div style="font-size:11px; color:#999; margin-top:2px;">刚刚</div></div>
+                        <div style="margin-left:auto; color:#ef4444; font-weight:bold; font-size:14px;">已开奖</div>
+                    </div>
+                    <div class="post-content">
+                        <div style="font-weight:bold; margin-bottom:5px;">淘天 Java 后端 SP</div>
+                        timeline：8.20投递 -> 9.15一面 -> 10.15HR面。<br>
+                        <span style="background:#f3f4f6; padding:2px 5px; border-radius:4px; font-family:monospace;">(26+2)*16 + 3w签字费 + 6w股票</span><br>
+                        总包大概 48w 左右。比去年略涨。
+                    </div>
+                    <div class="post-tags">
+                        <span>#阿里淘天</span><span>#薪资爆料</span>
+                    </div>
+                    <div class="post-actions">
+                        <span><i class="ph-bold ph-chat-circle"></i> 42</span>
+                        <span><i class="ph-bold ph-thumbs-up"></i> 108</span>
+                    </div>
+                </div>
+
+                <div class="community-post">
+                    <div class="post-header">
+                        <div class="avatar" style="background:#8b5cf6;">M</div>
+                        <div class="post-user">Mark_Dev <span style="font-weight:normal; color:#666;">@ 找工作中</span><div style="font-size:11px; color:#999; margin-top:2px;">2小时前</div></div>
+                    </div>
+                    <div class="post-content">
+                        <div style="font-weight:bold; margin-bottom:5px;">美团到店 二面凉经 😭</div>
+                        算法题：<span style="color:#2563eb;">LeetCode 42. 接雨水</span> (Hard)，边界条件没处理好。
+                    </div>
+                    <div class="post-tags">
+                        <span>#美团</span><span>#面经</span>
+                    </div>
+                    <div class="post-actions">
+                        <span><i class="ph-bold ph-chat-circle"></i> 15</span>
+                        <span><i class="ph-bold ph-thumbs-up"></i> 33</span>
+                    </div>
+                </div>
+
+                <div class="community-post" style="border-bottom:none;">
+                    <div class="post-header">
+                        <div class="avatar" style="background:#10b981;">H</div>
+                        <div class="post-user">HR小姐姐 <span style="font-weight:normal; color:#666;">@ 某中厂</span><div style="font-size:11px; color:#999; margin-top:2px;">5小时前</div></div>
+                    </div>
+                    <div class="post-content">
+                        <div style="font-weight:bold; margin-bottom:5px;">简历建议</div>
+                        最近筛简历发现很多同学还在写“熟悉SSM框架”。建议大家用STAR法则！
+                    </div>
+                    <div class="post-tags">
+                        <span>#简历指导</span><span>#HR视角</span>
+                    </div>
+                    <div class="post-actions">
+                        <span><i class="ph-bold ph-chat-circle"></i> 89</span>
+                        <span><i class="ph-bold ph-thumbs-up"></i> 456</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: 个人 -->
+        <div id="view-profile" class="view-section">
+            <div class="card profile-header">
+                <div class="avatar" style="width:50px; height:50px; font-size:24px; background:linear-gradient(135deg, #667eea, #764ba2);">User</div>
+                <div>
+                    <div style="font-weight:700; font-size:18px;">求职者</div>
+                    <div style="font-size:12px; color:var(--text-sub);">ID: <span id="displayUserId"></span></div>
+                </div>
+            </div>
+            <div class="card">
+                <div style="font-weight:600; margin-bottom:10px;">⚙️ 求职偏好 (AI记忆)</div>
+                <div id="preferencesDisplay" style="display:flex; flex-wrap:wrap; gap:5px;"></div>
+                <button onclick="clearPreferences()" style="margin-top:10px; font-size:12px; color:#dc2626; background:none; border:1px solid #dc2626; padding:4px 8px; border-radius:4px;">清除记忆</button>
+            </div>
+            <div class="card">
+                <div class="menu-item" onclick="toggleHistoryList()"><i class="ph-duotone ph-clock-counter-clockwise"></i> 历史记录</div>
+                <div id="historyListArea" style="display:none; background:#f9fafb; padding:10px; margin-bottom:10px;">
+                    <div id="recordsArea">加载中...</div>
+                </div>
+                <div class="menu-item" onclick="showFavorites()"><i class="ph-duotone ph-star"></i> 我的收藏</div>
+            </div>
+            <!-- 版本号移到了这里，更加低调 -->
+            <div style="text-align: center; font-size: 12px; color: #d1d5db; margin-top: 20px;">
+                JobAgent Pro v7.4.0
+            </div>
+        </div>
+
+    </div>
+
+    <div class="bottom-nav">
+        <div class="nav-item active" onclick="switchTab('agent', this)"><i class="ph-fill ph-robot"></i> Agent</div>
+        <div class="nav-item" onclick="switchTab('community', this)"><i class="ph-bold ph-users-three"></i> 社区</div>
+        <div class="nav-item" onclick="switchTab('profile', this)"><i class="ph-bold ph-user-circle"></i> 我的</div>
+    </div>
+
+    <div id="chatContainer">
+        <div style="padding:15px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; background:#f8f9fa; border-radius:16px 16px 0 0;">
+            <strong>💬 AI 求职顾问</strong>
+            <span onclick="toggleChat()" style="cursor:pointer;">✕</span>
+        </div>
+        <div id="chatMessages" style="flex:1; overflow-y:auto; padding:15px;"></div>
+        <div style="padding:15px; border-top:1px solid #eee; display:flex; gap:8px;">
+            <input type="text" id="chatInput" placeholder="输入消息..." style="flex:1; padding:8px; border:1px solid #ddd; border-radius:20px;">
+            <button onclick="sendMessage()" style="background:var(--primary); color:white; border:none; width:36px; height:36px; border-radius:50%;"><i class="ph-bold ph-paper-plane-right"></i></button>
+        </div>
+    </div>
+
+    <script>
+        let currentUserId = localStorage.getItem('user_id') || 'user_' + Math.floor(Math.random() * 10000);
+        localStorage.setItem('user_id', currentUserId);
+        document.getElementById('displayUserId').textContent = currentUserId;
+        let currentSessionId = null;
+
+        function switchTab(name, el) {
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            el.classList.add('active');
+            document.querySelectorAll('.view-section').forEach(s => s.classList.remove('active'));
+            document.getElementById('view-' + name).classList.add('active');
+            if(name === 'profile') loadPreferences();
+        }
+
+        document.getElementById('resumeFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file && file.type === 'application/pdf') {
+                // 隐藏占位符，显示Iframe和标签
+                document.getElementById('previewPlaceholder').style.display = 'none';
+                const iframe = document.getElementById('pdfViewer');
+                iframe.style.display = 'block';
+                iframe.src = URL.createObjectURL(file) + '#toolbar=0';
+                
+                const badge = document.getElementById('fileInfoBadge');
+                badge.style.display = 'block';
+                badge.textContent = `${(file.size/1024).toFixed(1)} KB`;
+            }
+        });
+
+        document.getElementById('analyzeButton').addEventListener('click', async () => {
+            const file = document.getElementById('resumeFile').files[0];
+            if (!file) { alert('请先上传简历'); return; }
+
+            const btn = document.getElementById('analyzeButton');
+            const status = document.getElementById('statusArea');
+            
+            document.getElementById('analysisContainer').style.display = 'none';
+            document.querySelectorAll('.step').forEach(s => s.classList.remove('active', 'completed'));
+            document.getElementById('stepReading').classList.add('active');
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="ph-bold ph-spinner ph-spin"></i> 分析中...';
+            status.style.display = 'block';
+            status.textContent = '正在读取简历内容...';
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('user_id', currentUserId);
+
+            try {
+                const response = await fetch('http://127.0.0.1:8000/analyze-resume', { method: 'POST', body: formData });
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
+                let topJobLink = null;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop();
+
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const data = JSON.parse(line);
+                            if(data.step) {
+                                const stepIds = ['', 'stepReading', 'stepScoring', 'stepSuggestions', 'stepMatching', 'stepDelivery'];
+                                let stepId = stepIds[data.step];
+                                if(data.status === 'active') {
+                                    updateStep(stepId, 'active');
+                                    status.textContent = `🔄 ${data.message}`;
+                                } else if (data.status === 'completed') {
+                                    updateStep(stepId, 'completed');
+                                    if (data.data) {
+                                        if (data.data.resume_analysis) displayAnalysis(data.data.resume_analysis);
+                                        if (data.data.improvements) displayImprovements(data.data.improvements);
+                                        if (data.data.salary) displaySalary(data.data.salary);
+                                        if (data.data.recommended_jobs) {
+                                            displayJobs(data.data.recommended_jobs);
+                                            if(data.data.recommended_jobs.length > 0) topJobLink = data.data.recommended_jobs[0].positionURL;
+                                            currentSessionId = data.data.session_id;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e) { console.error(e); }
+                    }
+                }
+
+                updateStep('stepDelivery', 'active');
+                status.textContent = '🚀 正在自动投递最佳岗位...';
+                
+                setTimeout(() => {
+                    updateStep('stepDelivery', 'completed');
+                    status.textContent = '✅ 全流程完成！已尝试打开最佳岗位页面。';
+                    if (topJobLink) {
+                        const newWindow = window.open(topJobLink, '_blank');
+                        if (!newWindow || newWindow.closed) alert('⚠️ 浏览器拦截了自动弹出窗口。请手动点击下方按钮。');
+                    } else {
+                        status.textContent = '✅ 分析完成';
+                    }
+                }, 1200);
+
+            } catch (error) {
+                status.textContent = '❌ ' + error.message;
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="ph-bold ph-lightning"></i> 重新分析';
+            }
+        });
+
+        function updateStep(id, state) {
+            if(!id) return;
+            const el = document.getElementById(id);
+            document.querySelectorAll('.step').forEach(s => { if(s.id !== id && state === 'active') s.classList.remove('active'); });
+            if(state === 'active') el.classList.add('active');
+            if(state === 'completed') { el.classList.remove('active'); el.classList.add('completed'); }
+        }
+
+        function displayAnalysis(data) {
+            document.getElementById('analysisContainer').style.display = 'block';
+            document.getElementById('scoreNumber').textContent = data.score;
+            document.getElementById('scoreBeat').textContent = data.score + '%';
+            document.getElementById('breakdownGrid').innerHTML = `
+                <div style="background:#f9fafb; padding:8px; border-radius:6px;"><strong>📝 内容</strong><br><span style="color:#666">${data.breakdown.content}</span></div>
+                <div style="background:#f9fafb; padding:8px; border-radius:6px;"><strong>💼 经验</strong><br><span style="color:#666">${data.breakdown.experience}</span></div>
+                <div style="background:#f9fafb; padding:8px; border-radius:6px;"><strong>🛠 技能</strong><br><span style="color:#666">${data.breakdown.skills}</span></div>
+                <div style="background:#f9fafb; padding:8px; border-radius:6px;"><strong>📄 格式</strong><br><span style="color:#666">${data.breakdown.format}</span></div>
+            `;
+        }
+
+        function displayImprovements(list) { document.getElementById('improvementsList').innerHTML = list.map(i => `<li>${i}</li>`).join(''); }
+        function displaySalary(salary) { document.getElementById('salaryBox').innerHTML = `<div style="font-weight:600; color:#166534;">💰 薪资预测：${salary.min}-${salary.max}K</div><div style="font-size:12px; color:#166534; opacity:0.8;">${salary.reasoning}</div>`; }
+        function displayJobs(jobs) {
+            const container = document.getElementById('jobsContainer');
+            document.getElementById('jobsArea').style.display = 'block';
+            container.innerHTML = '';
+            jobs.forEach((job, idx) => {
+                const isTop = idx === 0;
+                container.innerHTML += `
+                    <div class="job-card" style="${isTop ? 'border:2px solid var(--primary); box-shadow:0 0 10px rgba(37,99,235,0.1);' : ''}">
+                        ${isTop ? '<div style="background:var(--primary); color:white; font-size:10px; padding:2px 6px; border-radius:4px; display:inline-block; margin-bottom:5px;">🏆 最佳匹配 (已自动投递)</div>' : ''}
+                        <div class="job-header">
+                            <div><div style="font-weight:600; font-size:16px;">${job.name}</div><div style="font-size:12px; color:#666;">${job.companyName}</div></div>
+                            <div class="job-salary">${job.salary}</div>
+                        </div>
+                        <div style="font-size:12px; color:#666; margin-bottom:10px; background:#f9fafb; padding:5px; border-radius:4px;">匹配度 ${job.analysis.match_score} · ${job.analysis.match_reason.substring(0, 40)}...</div>
+                        <div style="display:flex; justify-content:flex-end; gap:10px;"><button style="padding:6px 12px; font-size:12px; border:1px solid #ddd; background:white; border-radius:15px;">收藏</button><a href="${job.positionURL}" target="_blank" style="padding:6px 12px; font-size:12px; background:var(--primary); color:white; text-decoration:none; border-radius:15px;">立即投递</a></div>
+                    </div>
+                `;
+            });
+        }
+
+        function toggleChat() {
+            const chat = document.getElementById('chatContainer');
+            chat.style.display = chat.style.display === 'flex' ? 'none' : 'flex';
+            const msgs = document.getElementById('chatMessages');
+            if (chat.style.display === 'flex' && msgs.children.length === 0) {
+                msgs.innerHTML = `<div style="margin-bottom:10px;"><div style="background:white; border:1px solid #eee; padding:8px 12px; border-radius:12px 12px 12px 0; max-width:85%; font-size:14px;">👋 你好！我是你的AI求职顾问。<br>请上传简历或直接提问！</div></div>`;
+            }
+        }
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if(!msg) return;
+            const msgs = document.getElementById('chatMessages');
+            msgs.innerHTML += `<div style="margin-bottom:10px; display:flex; justify-content:flex-end;"><div style="background:var(--primary); color:white; padding:8px 12px; border-radius:12px 12px 0 12px; max-width:85%; font-size:14px;">${msg}</div></div>`;
+            input.value = ''; msgs.scrollTop = msgs.scrollHeight;
+            try {
+                const fd = new FormData(); fd.append('session_id', currentSessionId || ''); fd.append('message', msg); fd.append('user_id', currentUserId);
+                const res = await fetch('http://127.0.0.1:8000/chat', {method:'POST', body:fd});
+                const data = await res.json();
+                msgs.innerHTML += `<div style="margin-bottom:10px;"><div style="background:white; border:1px solid #eee; padding:8px 12px; border-radius:12px 12px 12px 0; max-width:85%; font-size:14px;">${data.reply}</div></div>`;
+                msgs.scrollTop = msgs.scrollHeight;
+                loadPreferences();
+            } catch(e) { msgs.innerHTML += `<div style="color:red; font-size:12px;">发送失败</div>`; }
+        }
+
+        async function loadPreferences() {
+            try {
+                const res = await fetch(`http://127.0.0.1:8000/preferences/${currentUserId}`);
+                const data = await res.json();
+                const box = document.getElementById('preferencesDisplay');
+                if(data.preferences && Object.keys(data.preferences).length){ box.innerHTML = Object.entries(data.preferences).map(([k,v]) => `<span class="tag tag-blue">${v}</span>`).join(''); } else { box.innerHTML = '<span style="color:#999; font-size:12px;">暂无数据</span>'; }
+            } catch(e){}
+        }
+        async function clearPreferences() { await fetch(`http://127.0.0.1:8000/preferences/${currentUserId}`, {method:'DELETE'}); loadPreferences(); }
+        let historyOpen = false;
+        async function toggleHistoryList() {
+            historyOpen = !historyOpen;
+            document.getElementById('historyListArea').style.display = historyOpen ? 'block' : 'none';
+            if(historyOpen) {
+                const res = await fetch('http://127.0.0.1:8000/history?limit=5');
+                const data = await res.json();
+                document.getElementById('recordsArea').innerHTML = data.history.map(h => `<div style="font-size:12px; padding:5px 0; border-bottom:1px dashed #eee;">${h.resume_filename} <span style="float:right; color:#999;">${new Date(h.timestamp).toLocaleDateString()}</span></div>`).join('');
+            }
+        }
+    </script>
+</body>
+</html>
